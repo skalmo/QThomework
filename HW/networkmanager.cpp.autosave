@@ -2,6 +2,9 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 
+
+#include <QDir>
+#include <QFile>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
@@ -16,7 +19,7 @@ void NetworkManager::loadWebPage(){
     QNetworkRequest request;
 
     QString apiKey = "H73X7AEFBZRJU1SU";
-    QString urlString = QString("https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=MSFT&apikey=%0").arg(apiKey);
+    QString urlString = QString("https://www.alphavantage.co/query?function=DIGITAL_CURRENCY_INTRADAY&symbol=BTC&market=RUB&apikey=%0").arg(apiKey);
 
     QUrl url(urlString);
 
@@ -30,11 +33,22 @@ void NetworkManager::loadWebPage(){
 void NetworkManager::myReplyFinished(QNetworkReply*reply)
 {
     QByteArray webData = reply->readAll();
+    
+    // Save data to the file:
+    QFile *file = new QFile(QDir::currentPath() + "\\BitcoinPrice.txt");
+    if(file->open(QFile::Append))
+    {
+      file->write(webData);
+      file->flush();
+      file->close();
+    }
+    delete file;
 
-    QList<QPair<QString,QString>> graphValues;
-
+    QList<QPair<QString,QString>> graphRub;
+    QList<QPair<QString,QString>> graphUSD;
+    
     //QString webDataString = QString(webData);
-
+    
     QJsonDocument document = QJsonDocument::fromJson(webData);
 
     if(document.isArray() == true){
@@ -47,17 +61,23 @@ void NetworkManager::myReplyFinished(QNetworkReply*reply)
 
         QJsonObject rootObject = document.object();
 
-        QJsonObject timeSeries = rootObject["Time Series (Daily)"].toObject();
+        QJsonObject timeSeries = rootObject["Intraday Prices and Volumes for Digital Currency)"].toObject();
         QStringList keys = timeSeries.keys();
         for (QString k : keys){
-            QJsonObject dayValues = timeSeries[k].toObject();
-            QString openValue =  dayValues["1. open"].toString();
-
+            QJsonObject minValues = timeSeries[k].toObject();
+            QString rubValue =  minValues["1a. price (RUB)"].toString();
+            QString usdValue =  minValues["1b. price (USD)"].toString();
             QPair<QString,QString> dataItem;
             dataItem.first = k;
-            dataItem.second = openValue;
-
-            graphValues.append(dataItem);
+            dataItem.second = rubValue;
+        
+            QPair<QString,QString> dataItem1;
+            dataItem1.first = k;
+            dataItem1.second = usdValue;
+            
+            graphRub.append(dataItem);
+            graphUsd.append(dataItem1);
+            
         }
 
 /*
@@ -76,9 +96,21 @@ void NetworkManager::myReplyFinished(QNetworkReply*reply)
 */
     }
 
-    for (int i=0; i<graphValues.size(); i++){
-        QPair<QString,QString> data = graphValues[i];
-        qDebug()<<data.first <<" - "<<data.second;
+    for (int i=0; i<graphRub.size(); i++){
+        QPair<QString,QString> data = graphRub[i];
+        QTime xAxisParam;
+        xAxisParam.setHMS(QTime::fromString(data.first,"HH:MM:SS"));
+        xAxisParam.fromMSecsSinceStartOfDay();
+        float list = data.second.toFloat();
+        emit valueUpdated(QVariant(xAxisParam),QVariant(list));
+    }
+    for (int i=0; i<graphUSD.size(); i++){
+        QPair<QString,QString> data = graphUSD[i];
+        QTime xAxisParam;
+        xAxisParam.setHMS(QTime::fromString(data.first,"HH:MM:SS"));
+        xAxisParam.fromMSecsSinceStartOfDay();
+        float list = data.second.toFloat();
+        emit valueUpdated1(QVariant(xAxisParam),QVariant(list));
     }
 
 
